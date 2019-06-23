@@ -9,7 +9,7 @@
 function closesinglefigure(handle::Int)
     global gnuplot_state
 
-    term = gaston_config.terminal
+    term = config[:term][:terminal]
     term ∈ term_window && gnuplot_send("set term $term $handle close")
 
     # remove figure from global state
@@ -66,19 +66,15 @@ end
 # Push configuration, axes or curves to a figure. The handle is assumed valid.
 function push_figure!(handle,args...)
     index = findfigure(handle)
+    f = gnuplot_state.figs[index]
     for c in args
-        if isa(c,AxesConf)
-            gnuplot_state.figs[index].conf = c
-        elseif isa(c, Curve)
-            if gnuplot_state.figs[index].isempty
-                gnuplot_state.figs[index].curves = [c]
-            else
-                push!(gnuplot_state.figs[index].curves,c)
-            end
-            gnuplot_state.figs[index].isempty = false
-        elseif isa(c, String)
-            gnuplot_state.figs[index].gpcom = c
+        if isa(c, Curve)
+            isempty(f) ? f.curves = [c] : push!(f.curves,c)
         end
+        isa(c,AxesConf) && (f.axes = c)
+        isa(c, String) && (f.gpcom = c)
+        isa(c, PrintConf) && (f.print = c)
+        isa(c, TermConf) && (f.term = c)
     end
 end
 
@@ -148,13 +144,12 @@ function hist(s,bins)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", x::Figure)
-    if !x.isempty
-        if !isjupyter
-            llplot(x)
-            term = gaston_config.terminal
-            if term == "dumb" || term == "sixelgd" || term == "ijulia"
-                write(io, x.svg)
-            end
+    isempty(x) && return nothing
+    IsJupyterOrJuno && return nothing
+    llplot(x)
+    if config[:mode] != "null"
+        if (config[:term][:terminal] ∈ term_text) || (config[:mode] == "ijulia")
+            write(io, x.svg)
         end
     end
     return nothing
@@ -169,16 +164,21 @@ end
 # return configuration string for a single plot
 function linestr_single(conf::CurveConf)
     s = ""
-    conf.legend != "" && (s = s*" title '"*conf.legend*"' ")
-    conf.plotstyle != "" && (s = s*" with "*conf.plotstyle*" ")
-    conf.linecolor != "" && (s = s*"linecolor rgb '"*conf.linecolor*"' ")
-    conf.linewidth != "" && (s = s*"lw "*conf.linewidth*" ")
-    conf.linestyle != "" && (s = s*"dt '"*conf.linestyle*"' ")
+    conf.legend != "" && (s *= " title '"*conf.legend*"' ")
+    conf.plotstyle != "" && (s *= " with "*conf.plotstyle*" ")
+    conf.linecolor != "" && (s *= "lc rgb '"*conf.linecolor*"' ")
+    conf.linewidth != "" && (s *= "lw "*conf.linewidth*" ")
+    conf.linestyle != "" && (s *= "dt '"*conf.linestyle*"' ")
+    conf.fillstyle != "" && (s *= "fs "*conf.fillstyle*" ")
+    conf.fillcolor != "" && (s *= "fc \""*conf.fillcolor*"\" ")
     # some plotstyles don't allow point specifiers
-    cp = conf.plotstyle
-    if cp ∈ ps_sup_points
+    if conf.plotstyle ∈ ps_sup_points
         if conf.pointtype != ""
-            s = s*"pt "*pointtype(conf.pointtype)*" "
+            if conf.pointtype ∈ supported_pointtypes
+                s = s*"pt "*pointtype(conf.pointtype)*" "
+            else
+                s = s*"pt \""*conf.pointtype*"\" "
+            end
             conf.pointsize != "" && (s = s*"ps "*conf.pointsize*" ")
         end
     end
@@ -202,60 +202,31 @@ function linestr(curves::Vector{Curve}, cmd, file)
 end
 
 # Build a "set term" string appropriate for the terminal type
-function termstring(ac::AxesConf)
+function termstring(f::Figure,print=false)
     global gnuplot_state
-    global gaston_config
 
-    # define terminal name
-    term = ""
-    if !ac.print_flag
-        term = gaston_config.terminal
-        term == "null" && (term = "dumb")
-    else
-        term = ac.print_term
-        term == "pdf" && (term = "pdfcairo")
-        term == "eps" && (term = "epscairo")
-        term == "png" && (term = "pngcairo")
-    end
+    ac = f.axes
+    tc = f.term
+    pc = f.print
 
-    ts = ""
+    term = print ? pc.print_term : config[:term][:terminal]
 
     if term != ""
-        if term == "ijulia"
-            ts = "set term svg "
-        else
-            ts = "set term $term "
-        end
+        # determine font, size, global linewidth and background
+        font = print ? pc.print_font : tc.font
+        size = print ? pc.print_size : tc.size
+        background = print ? pc.print_background : tc.background
+        linewidth = print ? pc.print_linewidth : tc.linewidth
 
+        # build term string
+        ts = "set term $term "
         term ∈ term_window && (ts = ts*string(gnuplot_state.current)*" ")
-
-        font = ac.print_flag ? ac.print_font : ac.font
-        if term ∈ term_sup_font && font != ""
-            ts = ts*" font \""*font*"\" "
-        end
-
-        lw = ac.print_flag ? ac.print_linewidth : ac.linewidth
-        if term ∈ term_sup_lw && lw != ""
-            ts = ts*" linewidth "*lw*" "
-        end
-
-        size = ac.print_flag ? ac.print_size : ac.size
-        if term ∈ term_sup_size && size != ""
-            ts = ts*" size "*size*" "
-        end
-
-        if term ∈ term_sup_bkgnd && ac.background != ""
-            ts = ts*" background \""*ac.background*"\" "
-        end
-
-        if term ∈ term_file
-            # verify that user has set an output file
-            ac.print_outputfile == "" && error("Plotting to file, but no file name given. Use `set(outputfile=\"filename\")` to configure the output file name.")
-            ts = ts*"\nset output \"$(ac.print_outputfile)\" "
-        end
-
-        ac.termopts != "" && (ts = ts*ac.termopts)
-
+        term ∈ term_sup_font && (ts *= " font \""*font*"\" ")
+        term ∈ term_sup_lw && (ts *= " linewidth "*linewidth*" ")
+        term ∈ term_sup_size && (ts *= " size "*size*" ")
+        term ∈ term_sup_bkgnd && (ts *= " background \""*background*"\" ")
+        print || (ts *= config[:term][:termopts]*" ")
+        print && (ts = ts*"\nset output \"$(pc.print_outputfile)\" ")
     end
     return ts
 end
@@ -263,7 +234,7 @@ end
 # send gnuplot the current figure's configuration
 function gnuplot_send_fig_config(config)
     config.title != "" && gnuplot_send("set title '"*config.title*"' ")
-    config.fill != "" && gnuplot_send("set style fill "*config.fill)
+    config.fillstyle != "" && gnuplot_send("set style fill "*config.fillstyle)
     if config.grid != ""
         if config.grid == "on"
             gnuplot_send("set grid")
@@ -272,6 +243,7 @@ function gnuplot_send_fig_config(config)
         end
     end
     config.keyoptions != "" && gnuplot_send("set key "*config.keyoptions)
+    config.boxwidth != "" && gnuplot_send("set boxwidth "*config.boxwidth)
     if config.axis != ""
         config.axis == "semilogx" && gnuplot_send("set logscale x")
         config.axis == "semilogy" && gnuplot_send("set logscale y")
@@ -307,6 +279,8 @@ function gnuplot_send_fig_config(config)
     end
     config.palette != "" && gnuplot_send("set palette "*config.palette)
 end
+
+version() = "0.10.0-pre"
 
 # write commands to gnuplot's pipe
 function gnuplot_send(s)

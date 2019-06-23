@@ -4,160 +4,115 @@
 
 # This file contains configuration-related functions and types
 
-# Structure to keep Gaston's configuration
-mutable struct GastonConfig
-    # default CurveConf values
-    plotstyle::String
-    linecolor::String
-    linewidth::String
-    linestyle::String
-    pointtype::String
-    pointsize::String
-    # default AxesConf values
-    fill::String
-    grid::String
-    keyoptions::String
-    axis::String
-    xrange::String
-    yrange::String
-    zrange::String
-    xzeroaxis::String
-    yzeroaxis::String
-    zzeroaxis::String
-    palette::String
-    # default terminal type and options
-    terminal::String
-    font::String
-    size::String
-    background::String
-    termopts::String
-    # for printing to file
-    print_term::String
-    print_font::String
-    print_size::String
-    print_linewidth::String
-    print_outputfile::String
-    # prefix for temp data files
-    tmpprefix::String
-end
+# default term file string
+const tmpprefix = randstring(8)
 
-function GastonConfig()
-    term = "qt"
-    isjupyter && (term = "ijulia")
-    gc = GastonConfig(
-        # CurveConf
-        "","","","","","",
-        # AxesConf
-        "","","","","","","","","","","",
-        # terminal
-        term, "", "", "", "",
-        # print parameters
-        "pdf", "", "", "", "",
-        # tmp file prefix
-        randstring(8)
-    )
-    return gc
-end
+# Default font, size and background for each supported terminal
+const TerminalDefaults = Dict("wxt" => Dict(:font       => "Sans,10",
+                                            :size       => "640,384",
+                                            :background => "white"),
+                              "qt" => Dict(:font       => "Sans,9",
+                                           :size       => "640,480",
+                                           :background => ""),
+                              "x11" => Dict(:font       => "",
+                                            :size       => "640,480",
+                                            :background => ""),
+                              "aqua" => Dict(:font       => "Times-Roman,14",
+                                             :size       => "846,594",
+                                             :background => ""),
+                              "dumb" => Dict(:font       => "",
+                                             :size       => "79,24",
+                                             :background => ""),
+                              "sixelgd" => Dict(:font       => "Sans,12",
+                                                :size       => "640,480",
+                                                :background => "white"),
+                              "svg" => Dict(:font       => "Arial,12",
+                                            :size       => "640,384",
+                                            :background => "white"),
+                              "gif" => Dict(:font       => "Sans,12",
+                                            :size       => "640,480",
+                                            :background => "white"),
+                              "pngcairo" => Dict(:font       => "Sans,12",
+                                                 :size       => "640,480",
+                                                 :background => "white"),
+                              "pdfcairo" => Dict(:font       => "Sans,12",
+                                                 :size       => "5,3",
+                                                 :background => "white"),
+                              "epscairo" => Dict(:font       => "Sans,12",
+                                                 :size       => "5,3",
+                                                 :background => "white")
+)
+
+# Dicts to store user-specified configuration
+default_config() = Dict(:mode => IsJupyterOrJuno ? "ijulia" : "normal",
+                        :term => Dict(:terminal => IsJupyterOrJuno ? "svg" : "qt",
+                                      :font => "",
+                                      :size => "",
+                                      :linewidth => "",
+                                      :background => "",
+                                      :termopts => ""),
+                        :axes => Dict(:axis => "",
+                                      :xrange => "",
+                                      :yrange => "",
+                                      :zrange => "",
+                                      :fillstyle => "",
+                                      :grid => "",
+                                      :boxwidth => "",
+                                      :xzeroaxis => "",
+                                      :yzeroaxis => "",
+                                      :zzeroaxis => "",
+                                      :keyoptions => "",
+                                      :palette => "",
+                                      :onlyimpulses => false),
+                        :curve => Dict(:plotstyle => "",
+                                       :linecolor => "",
+                                       :linestyle => "",
+                                       :pointtype => "",
+                                       :pointsize => "",
+                                       :fillcolor => ""),
+                        :print => Dict(:print_term => "pdfcairo",
+                                       :print_font => "",
+                                       :print_size => "",
+                                       :print_linewidth => "",
+                                       :print_background => "",
+                                       :print_outputfile => ""))
 
 # Set any of Gaston's configuration variables
-# This function assumes that gaston_config exists
-function set(;plotstyle       = gaston_config.plotstyle,
-             linecolor        = gaston_config.linecolor,
-             linewidth        = gaston_config.linewidth,
-             linestyle        = gaston_config.linestyle,
-             pointtype        = gaston_config.pointtype,
-             pointsize        = gaston_config.pointsize,
-             fill             = gaston_config.fill,
-             grid             = gaston_config.grid,
-             keyoptions       = gaston_config.keyoptions,
-             axis             = gaston_config.axis,
-             xrange           = gaston_config.xrange,
-             yrange           = gaston_config.yrange,
-             zrange           = gaston_config.zrange,
-             xzeroaxis        = gaston_config.xzeroaxis,
-             yzeroaxis        = gaston_config.yzeroaxis,
-             zzeroaxis        = gaston_config.zzeroaxis,
-             palette          = gaston_config.palette,
-             terminal         = gaston_config.terminal,
-             font             = gaston_config.font,
-             size             = gaston_config.size,
-             background       = gaston_config.background,
-             termopts         = gaston_config.termopts,
-             print_term       = gaston_config.print_term,
-             print_font       = gaston_config.print_font,
-             print_size       = gaston_config.print_size,
-             print_linewidth  = gaston_config.print_linewidth,
-             print_outputfile = gaston_config.print_outputfile,
-             reset            = false
-            )
-    # Validate paramaters
-    valid_plotstyle(plotstyle)
-    valid_linestyle(linestyle)
-    valid_pointtype(pointtype)
-    valid_axis(axis)
-    valid_range(xrange)
-    valid_range(yrange)
-    valid_range(zrange)
-    valid_terminal(terminal)
+function set(;reset = false, terminal=config[:term][:terminal],
+             mode = config[:mode], kw...)
+    global config
 
     if reset
-        gaston_config.plotstyle        = ""
-        gaston_config.linecolor        = ""
-        gaston_config.linewidth        = ""
-        gaston_config.linestyle        = ""
-        gaston_config.pointtype        = ""
-        gaston_config.pointsize        = ""
-        gaston_config.fill             = ""
-        gaston_config.grid             = ""
-        gaston_config.keyoptions       = ""
-        gaston_config.axis             = ""
-        gaston_config.xrange           = ""
-        gaston_config.yrange           = ""
-        gaston_config.zrange           = ""
-        gaston_config.xzeroaxis        = ""
-        gaston_config.yzeroaxis        = ""
-        gaston_config.zzeroaxis        = ""
-        gaston_config.palette          = ""
-        gaston_config.terminal         = "qt"
-        isjupyter && (gaston_config.terminal = "ijulia")
-        gaston_config.font             = ""
-        gaston_config.size             = ""
-        gaston_config.background       = ""
-        gaston_config.termopts         = ""
-        gaston_config.print_term       = "pdf"
-        gaston_config.print_font       = ""
-        gaston_config.print_size       = ""
-        gaston_config.print_linewidth  = ""
-        gaston_config.print_outputfile = ""
-    else
-        gaston_config.plotstyle         = plotstyle
-        gaston_config.linecolor         = linecolor
-        gaston_config.linewidth         = linewidth
-        gaston_config.linestyle         = linestyle
-        gaston_config.pointtype         = pointtype
-        gaston_config.pointsize         = pointsize
-        gaston_config.fill              = fill
-        gaston_config.grid              = grid
-        gaston_config.keyoptions        = keyoptions
-        gaston_config.axis              = axis
-        gaston_config.xrange            = xrange
-        gaston_config.yrange            = yrange
-        gaston_config.zrange            = zrange
-        gaston_config.xzeroaxis         = xzeroaxis
-        gaston_config.yzeroaxis         = yzeroaxis
-        gaston_config.zzeroaxis         = zzeroaxis
-        gaston_config.palette           = palette
-        gaston_config.terminal          = terminal
-        isjupyter && (gaston_config.terminal = "ijulia")
-        gaston_config.font              = font
-        gaston_config.size              = size
-        gaston_config.background        = background
-        gaston_config.termopts          = termopts
-        gaston_config.print_term        = print_term
-        gaston_config.print_font        = print_font
-        gaston_config.print_size        = print_size
-        gaston_config.print_linewidth   = print_linewidth
-        gaston_config.print_outputfile  = print_outputfile
+        config = default_config()
+        return nothing
+    end
+
+    t = terminal
+    mode == "ijulia" && (t = "svg")
+    mode == "null" && (t = "dumb")
+    if mode == "normal"
+        terminal == "pdf" && (t = "pdfcairo")
+        terminal == "pnf" && (t = "pnfcairo")
+        terminal == "eps" && (t = "epscairo")
+    end
+    valid_terminal(t)
+    config[:term][:terminal] = t
+    config[:mode] = mode
+
+    for k in keys(kw)
+        k == :plotstyle && valid_plotstyle(kw[k])
+        k == :linestyle && valid_linestyle(kw[k])
+        k == :pointtype && valid_pointtype(kw[k])
+        k == :axis && valid_axis(kw[k])
+        k == :xrange && valid_range(kw[k])
+        k == :yrange && valid_range(kw[k])
+        k == :zrange && valid_range(kw[k])
+        flag = true
+        for i in [:term, :axes, :curve, :print]
+            c = config[i]
+            haskey(c, k) && (flag=false; c[k] = kw[k])
+        end
+        flag && throw(MethodError(set, "invalid setting"))
     end
 
     return nothing
@@ -167,30 +122,24 @@ end
 # supports multiple windows
 const term_window = ["qt", "wxt", "x11", "aqua"]
 # outputs text
-const term_text = ["dumb", "null", "sixelgd", "ijulia"]
+const term_text = ["dumb", "sixelgd"]
 # outputs to a file
-const term_file = ["svg", "gif", "png", "pdf", "eps", "pngcairo", "pdfcairo",
-                   "epscairo"]
+const term_file = ["svg", "gif", "pngcairo", "pdfcairo", "epscairo"]
 # supports size
-const term_sup_size = ["qt", "wxt", "x11", "sixelgd", "svg", "ijulia", "gif",
-                       "png", "pdf", "eps", "dumb", "pngcairo", "pdfcairo",
-                       "epscairo"]
+const term_sup_size = ["qt", "wxt", "x11", "sixelgd", "svg", "gif",
+                       "dumb", "pngcairo", "pdfcairo", "epscairo"]
 # supports font
-const term_sup_font = ["qt", "wxt", "x11", "aqua", "sixelgd", "svg", "ijulia",
-                       "gif", "png", "pdf", "eps", "pngcairo", "pdfcairo",
-                       "epscairo"]
+const term_sup_font = ["qt", "wxt", "x11", "aqua", "sixelgd", "svg",
+                       "gif","pngcairo", "pdfcairo", "epscairo"]
 # supports linewidth
-const term_sup_lw = ["qt", "wxt", "x11", "aqua", "sixelgd", "svg", "ijulia",
-                     "gif", "png", "pdf", "eps", "pngcairo", "pdfcairo",
-                     "epscairo"]
+const term_sup_lw = ["qt", "wxt", "x11", "aqua", "sixelgd", "svg",
+                     "gif", "pngcairo", "pdfcairo", "epscairo"]
 # supports background color
-const term_sup_bkgnd = ["sixelgd", "svg", "ijulia", "wxt", "gif", "pdf", "eps",
-                        "png", "pdfcairo", "pngcairo", "epscairo"]
+const term_sup_bkgnd = ["sixelgd", "svg", "wxt", "gif", "pdfcairo", "pngcairo", "epscairo"]
 
 # List of valid configuration values
-const supported_terminals = ["", "qt", "wxt", "x11", "aqua", "dumb", "null",
-                             "sixelgd", "ijulia", "svg", "gif", "png", "pdf",
-                             "eps", "pngcairo", "pdfcairo", "epscairo"]
+const supported_terminals = ["", "qt", "wxt", "x11", "aqua", "dumb", "sixelgd",
+                             "svg", "gif", "pngcairo", "pdfcairo", "epscairo"]
 const supported_2Dplotstyles = ["", "lines", "linespoints", "points",
                                 "impulses", "boxes", "errorlines", "errorbars",
                                 "dots", "steps", "fsteps", "fillsteps",
@@ -233,7 +182,8 @@ function valid_3Dplotstyle(s)
 end
 function valid_pointtype(s)
     s ∈ supported_pointtypes && return true
-    throw(DomainError(s,"supported point types are: $supported_pointtypes"))
+    length(s) == 1 && return true
+    throw(DomainError(s,"supported point types are: $supported_pointtypes or single-character UTF-8 strings"))
 end
 function valid_axis(s)
     s ∈ supported_axis && return true

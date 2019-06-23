@@ -48,7 +48,6 @@ Returns the current figure handle.
 =#
 function figure(h::Union{Int,Nothing} = 0; redraw = true)
     global gnuplot_state
-    global gaston_config
 
     # build vector of handles
     handles = gethandles()
@@ -83,23 +82,25 @@ function plot(x::Coord,y::Coord;
              title::String      = "",
              xlabel::String     = "",
              ylabel::String     = "",
-             plotstyle::String  = gaston_config.plotstyle,
-             linecolor::String  = gaston_config.linecolor,
-             linewidth::String  = gaston_config.linewidth,
-             linestyle::String  = gaston_config.linestyle,
-             pointtype::String  = gaston_config.pointtype,
-             pointsize::String  = gaston_config.pointsize,
-             fill::String       = gaston_config.fill,
-             grid::String       = gaston_config.grid,
-             keyoptions::String = gaston_config.keyoptions,
-             axis::String       = gaston_config.axis,
-             xrange::String     = gaston_config.xrange,
-             yrange::String     = gaston_config.yrange,
-             xzeroaxis::String  = gaston_config.xzeroaxis,
-             yzeroaxis::String  = gaston_config.yzeroaxis,
-             font::String       = gaston_config.font,
-             size::String       = gaston_config.size,
-             background::String = gaston_config.background,
+             plotstyle::String  = config[:curve][:plotstyle],
+             linecolor::String  = config[:curve][:linecolor],
+             linewidth::String  = "1",
+             linestyle::String  = config[:curve][:linestyle],
+             pointtype::String  = config[:curve][:pointtype],
+             pointsize::String  = config[:curve][:pointsize],
+             fillcolor::String  = config[:curve][:fillcolor],
+             fillstyle::String  = config[:axes][:fillstyle],
+             grid::String       = config[:axes][:grid],
+             boxwidth::String   = config[:axes][:boxwidth],
+             keyoptions::String = config[:axes][:keyoptions],
+             axis::String       = config[:axes][:axis],
+             xrange::String     = config[:axes][:xrange],
+             yrange::String     = config[:axes][:yrange],
+             xzeroaxis::String  = config[:axes][:xzeroaxis],
+             yzeroaxis::String  = config[:axes][:yzeroaxis],
+             font::String       = config[:term][:font],
+             size::String       = config[:term][:size],
+             background::String = config[:term][:background],
              financial::FinancialCoords = FinancialCoords(),
              err::ErrorCoords   = ErrorCoords(),
              handle::Union{Int,Nothing} = gnuplot_state.current,
@@ -114,26 +115,35 @@ function plot(x::Coord,y::Coord;
     valid_range(yrange)
     valid_coords(x,y,err=err,fin=financial)
 
+    term = config[:term][:terminal]
+    font == "" && (font = TerminalDefaults[term][:font])
+    size == "" && (size = TerminalDefaults[term][:size])
+    linewidth == "" && (linewidth = "1")
+    background == "" && (background = TerminalDefaults[term][:background])
+
+    # determine handle and clear figure
     handle = figure(handle, redraw = false)
     clearfigure(handle)
+
+    # create figure configuration
+    tc = TermConf(font,size,linewidth,background)
     ac = AxesConf(title = title,
                   xlabel = xlabel,
                   ylabel = ylabel,
-                  fill = fill,
                   grid = grid,
+                  boxwidth = boxwidth,
                   keyoptions = keyoptions,
                   axis = axis,
                   xrange = xrange,
                   yrange = yrange,
                   xzeroaxis = xzeroaxis,
                   yzeroaxis = yzeroaxis,
-                  font = font,
-                  size = size,
-                  background = background
                  )
-    cc = CurveConf(legend,plotstyle,linecolor,pointtype,linewidth,linestyle,pointsize)
+    cc = CurveConf(legend,plotstyle,linecolor,linewidth,
+                   linestyle,pointtype,pointsize,fillstyle,fillcolor)
     c = Curve(x,y,financial,err,cc)
-    push_figure!(handle,ac,c,gpcom)
+    push_figure!(handle,tc,ac,c,gpcom)
+
     return gnuplot_state.figs[findfigure(handle)]
 end
 plot(y::Coord;args...) = plot(1:length(y),y;args...)
@@ -145,12 +155,14 @@ plot(c::Vector{<:Complex};args...) = plot(real(c),imag(c);args...)
 # Add a curve to an existing figure
 function plot!(x::Coord,y::Coord;
              legend::String    = "",
-             plotstyle::String = gaston_config.plotstyle,
-             linecolor::String = gaston_config.linecolor,
-             linewidth::String = gaston_config.linewidth,
-             linestyle::String = gaston_config.linestyle,
-             pointtype::String = gaston_config.pointtype,
-             pointsize::String = gaston_config.pointsize,
+             plotstyle::String = config[:curve][:plotstyle],
+             linecolor::String = config[:curve][:linecolor],
+             linewidth::String = "1",
+             linestyle::String = config[:curve][:linestyle],
+             pointtype::String = config[:curve][:pointtype],
+             pointsize::String = config[:curve][:pointsize],
+             fillcolor::String  = config[:curve][:fillcolor],
+             fillstyle::String  = config[:axes][:fillstyle],
              financial::FinancialCoords = FinancialCoords(),
              err::ErrorCoords  = ErrorCoords(),
              handle::Union{Int,Nothing} = gnuplot_state.current
@@ -162,8 +174,12 @@ function plot!(x::Coord,y::Coord;
     valid_linestyle(linestyle)
     valid_coords(x,y,err=err,fin=financial)
 
+    # verify that handle exists
+    handles =gethandles()
+    handle ∈ handles || error("Cannot append curve to non-existing handle")
     handle = figure(handle, redraw = false)
-    cc = CurveConf(legend,plotstyle,linecolor,pointtype,linewidth,linestyle,pointsize)
+    cc = CurveConf(legend,plotstyle,linecolor,linewidth,linestyle,pointtype,
+                   pointsize,fillstyle,fillcolor)
     c = Curve(x,y,financial,err,cc)
     push_figure!(handle,c)
     return gnuplot_state.figs[findfigure(handle)]
@@ -173,53 +189,42 @@ plot!(x::Real,y::Real;args...) = plot!([x],[y];args...)
 plot!(c::Complex;args...) = plot!(real(c),imag(c);args...)
 plot!(c::Vector{<:Complex};args...) = plot!(real(c),imag(c);args...)
 
-function histogram(data::Coord;
-                   bins::Int          = 10,
-                   norm::Real         = 1.0,
-                   legend::String     = "",
-                   title::String      = "",
-                   xlabel::String     = "",
-                   ylabel::String     = "",
-                   linecolor::String  = gaston_config.linecolor,
-                   linewidth::String  = gaston_config.linewidth,
-                   fill::String       = gaston_config.fill,
-                   keyoptions::String = gaston_config.keyoptions,
-                   xrange::String     = gaston_config.xrange,
-                   yrange::String     = gaston_config.yrange,
-                   font::String       = gaston_config.font,
-                   size::String       = gaston_config.size,
-                   background::String = gaston_config.background,
-                   handle::Union{Int,Nothing} = gnuplot_state.current,
-                   gpcom::String      = ""
-                   )
+function scatter(x::Coord,y::Coord;
+                 handle::Union{Int,Nothing} = gnuplot_state.current,
+                 args...)
+    plot(x,y,plotstyle="points",handle=handle;args...)
+end
+
+function stem(x::Coord,y::Coord;
+              onlyimpulses = config[:axes][:onlyimpulses],
+              handle::Union{Int,Nothing} = gnuplot_state.current, args...)
+    p = plot(x,y;handle=handle,
+             plotstyle="impulses", linecolor="blue",linewidth="1.25",args...)
+    onlyimpulses || (p = plot!(x,y;plotstyle="points", linecolor="blue",
+                               pointtype="ecircle", pointsize="1.5",args...))
+    return p
+end
+function stem(y;handle=gnuplot_state.current,
+              onlyimpulses=config[:axes][:onlyimpulses],args...)
+    stem(1:length(y),y;handle=handle,onlyimpulses=onlyimpulses,args...)
+end
+
+function bar(x::Coord,y::Coord;
+             handle::Union{Int,Nothing} = gnuplot_state.current, args...)
+    plot(x,y; handle=handle,
+         plotstyle="boxes",boxwidth="0.8 relative",fillstyle="solid 0.5",args...)
+end
+bar(y;handle=gnuplot_state.current,args...) = bar(1:length(y),y;handle=handle,args...)
+
+function histogram(data::Coord;bins::Int=10,norm::Real=1.0,args...)
     # validation
-    valid_range(xrange)
-    valid_range(yrange)
     bins < 1 && throw(DomainError(bins, "at least one bin is required"))
     norm < 0 && throw(DomainError(norm, "norm must be a positive number."))
 
-    handle = figure(handle, redraw = false)
-    clearfigure(handle)
-
-    ac = AxesConf(title = title,
-                  xlabel = xlabel,
-                  ylabel = ylabel,
-                  fill = fill,
-                  keyoptions = keyoptions,
-                  xrange = xrange,
-                  yrange = yrange,
-                  font = font,
-                  size = size,
-                  background = background)
     x, y = hist(data,bins)
     y = norm*y/(step(x)*sum(y))  # make area under histogram equal to norm
-    cc = CurveConf(legend = legend,
-                   plotstyle = "boxes",
-                   linecolor = linecolor,
-                   linewidth = linewidth)
-    c = Curve(x,y,cc)
-    push_figure!(handle,ac,c,gpcom)
-    return gnuplot_state.figs[findfigure(handle)]
+
+    bar(x, y; boxwidth="0.9 relative", fillstyle="solid 0.5",args...)
 end
 
 # image plots
@@ -228,10 +233,10 @@ function imagesc(x::Coord,y::Coord,Z::Coord;
                  xlabel::String    = "",
                  ylabel::String    = "",
                  clim::Vector{Int} = [0,255],
-                 xrange::String    = gaston_config.xrange,
-                 yrange::String    = gaston_config.yrange,
-                 font::String      = gaston_config.font,
-                 size::String      = gaston_config.size,
+                 xrange::String    = config[:axes][:xrange],
+                 yrange::String    = config[:axes][:yrange],
+                 font::String      = config[:term][:font],
+                 size::String      = config[:term][:size],
                  gpcom::String     = "",
                  handle::Union{Int,Nothing} = gnuplot_state.current
                  )
@@ -246,15 +251,17 @@ function imagesc(x::Coord,y::Coord,Z::Coord;
     handle = figure(handle, redraw = false)
     clearfigure(handle)
 
+    # create figure configuration
     ndims(Z) == 2 ? plotstyle = "image" : plotstyle = "rgbimage"
-
     ac = AxesConf(title = title,
                   xlabel = xlabel,
                   ylabel = ylabel,
                   xrange = xrange,
-                  yrange = yrange,
-                  font = font,
-                  size = size)
+                  yrange = yrange)
+    term = config[:term][:terminal]
+    font == "" && (font = TerminalDefaults[term][:font])
+    size == "" && (size = TerminalDefaults[term][:size])
+    tc = TermConf(font,size,"1","white")
     cc = CurveConf(plotstyle=plotstyle)
 
     if ndims(Z) == 3
@@ -265,7 +272,7 @@ function imagesc(x::Coord,y::Coord,Z::Coord;
     end
     c = Curve(x,y,Z,cc)
 
-    push_figure!(handle,ac,c,gpcom)
+    push_figure!(handle,tc,ac,c,gpcom)
     return gnuplot_state.figs[findfigure(handle)]
 end
 imagesc(Z::Coord;args...) = imagesc(1:size(Z)[2],1:size(Z)[1],Z;args...)
@@ -273,24 +280,26 @@ imagesc(Z::Coord;args...) = imagesc(1:size(Z)[2],1:size(Z)[1],Z;args...)
 # surface plots
 function surf(x::Coord,y::Coord,Z::Coord;
               legend::String     = "",
-              plotstyle::String  = gaston_config.plotstyle,
-              linecolor::String  = gaston_config.linecolor,
-              linewidth::String  = gaston_config.linewidth,
-              pointtype::String  = gaston_config.pointtype,
-              pointsize::String  = gaston_config.pointsize,
               title::String      = "",
               xlabel::String     = "",
               ylabel::String     = "",
               zlabel::String     = "",
-              keyoptions::String = gaston_config.keyoptions,
-              xrange::String     = gaston_config.xrange,
-              yrange::String     = gaston_config.yrange,
-              zrange::String     = gaston_config.zrange,
-              xzeroaxis::String  = gaston_config.xzeroaxis,
-              yzeroaxis::String  = gaston_config.yzeroaxis,
-              zzeroaxis::String  = gaston_config.zzeroaxis,
-              font::String       = gaston_config.font,
-              size::String       = gaston_config.size,
+              plotstyle::String  = config[:curve][:plotstyle],
+              linecolor::String  = config[:curve][:linecolor],
+              linewidth::String  = "1",
+              pointtype::String  = config[:curve][:pointtype],
+              pointsize::String  = config[:curve][:pointsize],
+              keyoptions::String = config[:axes][:keyoptions],
+              xrange::String     = config[:axes][:xrange],
+              yrange::String     = config[:axes][:yrange],
+              zrange::String     = config[:axes][:zrange],
+              xzeroaxis::String  = config[:axes][:xzeroaxis],
+              yzeroaxis::String  = config[:axes][:yzeroaxis],
+              zzeroaxis::String  = config[:axes][:zzeroaxis],
+              palette::String    = config[:axes][:palette],
+              font::String       = config[:term][:font],
+              size::String       = config[:term][:size],
+              background::String = config[:term][:background],
               handle::Union{Int,Nothing} = gnuplot_state.current,
               gpcom::String      = ""
               )
@@ -306,6 +315,8 @@ function surf(x::Coord,y::Coord,Z::Coord;
 
     handle = figure(handle, redraw = false)
     clearfigure(handle)
+
+    # create figure configuration
     ac = AxesConf(title = title,
                   xlabel = xlabel,
                   ylabel = ylabel,
@@ -317,9 +328,12 @@ function surf(x::Coord,y::Coord,Z::Coord;
                   xzeroaxis = xzeroaxis,
                   yzeroaxis = yzeroaxis,
                   zzeroaxis = zzeroaxis,
-                  font = font,
-                  size = size
-                 )
+                  palette = palette)
+    term = config[:term][:terminal]
+    font == "" && (font = TerminalDefaults[term][:font])
+    size == "" && (size = TerminalDefaults[term][:size])
+    background == "" && (background = TerminalDefaults[term][:background])
+    tc = TermConf(font,size,"1",background)
     cc = CurveConf(plotstyle = plotstyle,
                    legend = legend,
                    linecolor = linecolor,
@@ -327,7 +341,7 @@ function surf(x::Coord,y::Coord,Z::Coord;
                    linewidth = linewidth,
                    pointsize = pointsize)
     c = Curve(x,y,Z,cc)
-    push_figure!(handle,ac,c,gpcom)
+    push_figure!(handle,tc,ac,c,gpcom)
     return gnuplot_state.figs[findfigure(handle)]
 end
 surf(x::Coord,y::Coord,f::Function;args...) = surf(x,y,meshgrid(x,y,f);args...)
@@ -335,36 +349,38 @@ surf(Z::Matrix;args...) = surf(1:size(Z)[2],1:size(Z)[1],Z;args...)
 
 # print a figure to a file
 function printfigure(;handle::Union{Int,Nothing} = gnuplot_state.current,
-                     term::String       = gaston_config.print_term,
-                     font::String       = gaston_config.print_font,
-                     size::String       = gaston_config.print_size,
-                     linewidth::String  = gaston_config.print_linewidth,
-                     outputfile::String = gaston_config.print_outputfile
+                     term::String       = config[:print][:print_term],
+                     font::String       = config[:print][:print_font],
+                     size::String       = config[:print][:print_size],
+                     linewidth::String  = config[:print][:print_linewidth],
+                     background::String = config[:print][:print_background],
+                     outputfile::String = config[:print][:print_outputfile]
                     )
 
     # disable this command in IJulia
     # TODO: see if it's desirable and/or possible to re-enable it
-    isjupyter && error("printfigure command disabled in Jupyter notebook.")
+    IsJupyterOrJuno && error("printfigure command disabled in Jupyter notebook.")
 
     h = findfigure(handle)
     h == 0 && throw(DomainError(h, "requested figure does not exist."))
     isempty(outputfile) && throw(DomainError("Please specify an output filename."))
-    valid_file_term(term)
 
     # set figure's print parameters
-    fig = gnuplot_state.figs[h]
-    fig.conf.print_flag = true
-    fig.conf.print_term = term
-    fig.conf.print_font = font
-    fig.conf.print_size = size
-    fig.conf.print_linewidth = linewidth
-    fig.conf.print_outputfile = outputfile
-    llplot(fig)
-    # gnuplot is weird: this command is needed to close the output file
-    gnuplot_send("set output")
+    term == "pdf" && (term = "pdfcairo")
+    term == "png" && (term = "pngcairo")
+    term == "eps" && (term = "epscairo")
+    valid_file_term(term)
 
-    # unset print_flag
-    fig.conf.print_flag = false
+    font == "" && (font = TerminalDefaults[term][:font])
+    size == "" && (size = TerminalDefaults[term][:size])
+    linewidth == "" && (linewidth = "1")
+    background == "" && (background = TerminalDefaults[term][:background])
+
+    fig = gnuplot_state.figs[h]
+    pc = PrintConf(term,font,size,linewidth,background,outputfile)
+    fig.print = pc
+    llplot(fig,print=true)
+    gnuplot_send("set output") # gnuplot needs this to close the output file
 
     return nothing
 end

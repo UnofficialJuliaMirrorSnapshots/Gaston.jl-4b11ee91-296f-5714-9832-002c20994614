@@ -6,6 +6,25 @@
 
 # Structs to define a figure
 
+## Term configuration
+mutable struct TermConf
+    font::String
+    size::String
+    linewidth::String
+    background::String
+end
+TermConf() = TermConf("","","","")
+
+mutable struct PrintConf
+    print_term::String
+    print_font::String
+    print_size::String
+    print_linewidth::String
+    print_background::String
+    print_outputfile::String
+end
+PrintConf() = PrintConf("","","","","","")
+
 ## Coordinates
 Coord = Union{AbstractRange{T},Array{T}} where T <: Real
 
@@ -34,25 +53,17 @@ ErrorCoords(l::Vector,h::Vector) = ErrorCoords(true,l,h)
 
 ## Curves
 # Curve configuration
-struct CurveConf
-    legend::String
-    plotstyle::String
-    linecolor::String       # run 'show colornames' inside gnuplot
-    pointtype::String
-    linewidth::String
-    linestyle::String
-    pointsize::String
+Base.@kwdef struct CurveConf
+    legend::String    = ""
+    plotstyle::String = config[:curve][:plotstyle]
+    linecolor::String = config[:curve][:linecolor]
+    linewidth::String = "1"
+    linestyle::String = config[:curve][:linestyle]
+    pointtype::String = config[:curve][:pointtype]
+    pointsize::String = config[:curve][:pointsize]
+    fillstyle::String = ""
+    fillcolor::String = config[:curve][:pointsize]
 end
-# Convenience constructor
-CurveConf(;
-          legend    = "",
-          plotstyle = gaston_config.plotstyle,
-          linecolor = gaston_config.linecolor,
-          pointtype = gaston_config.pointtype,
-          linewidth = gaston_config.linewidth,
-          linestyle = gaston_config.linestyle,
-          pointsize = gaston_config.pointsize
-         ) = CurveConf(legend,plotstyle,linecolor,pointtype,linewidth,linestyle,pointsize)
 
 # A curve is a set of coordinates and a configuration
 mutable struct Curve
@@ -77,82 +88,39 @@ Curve(x,y,fc::FinancialCoords,ec::ErrorCoords,c::CurveConf) =
 Curve(x,y,Z) = Curve(x,y,Z,FinancialCoords(),ErrorCoords(),CurveConf())
 Curve(x,y,Z,c::CurveConf) = Curve(x,y,Z,FinancialCoords(),ErrorCoords(),c)
 
-## Axes
 # Storage for axes configuration
-mutable struct AxesConf
-    title::String
-    xlabel::String
-    ylabel::String
-    zlabel::String
-    linewidth::String
-    fill::String
-    grid::String
-    keyoptions::String
-    axis::String
-    xrange::String
-    yrange::String
-    zrange::String
-    xzeroaxis::String
-    yzeroaxis::String
-    zzeroaxis::String
-    font::String
-    size::String
-    background::String
-    palette::String
-    termopts::String
-    # parameters for printing
-    print_flag::Bool
-    print_term::String
-    print_font::String
-    print_size::String
-    print_linewidth::String
-    print_outputfile::String
+Base.@kwdef mutable struct AxesConf
+    title::String      = ""
+    xlabel::String     = ""
+    ylabel::String     = ""
+    zlabel::String     = ""
+    fillstyle::String  = config[:axes][:fillstyle]
+    grid::String       = config[:axes][:grid]
+    boxwidth::String   = config[:axes][:boxwidth]
+    keyoptions::String = config[:axes][:keyoptions]
+    axis::String       = config[:axes][:axis]
+    xrange::String     = config[:axes][:xrange]
+    yrange::String     = config[:axes][:yrange]
+    zrange::String     = config[:axes][:zrange]
+    xzeroaxis::String  = config[:axes][:xzeroaxis]
+    yzeroaxis::String  = config[:axes][:yzeroaxis]
+    zzeroaxis::String  = config[:axes][:zzeroaxis]
+    palette::String    = config[:axes][:palette]
 end
-# Constructor with default values (stored in gaston_config)
-AxesConf(;
-      title            = "",
-      xlabel           = "",
-      ylabel           = "",
-      zlabel           = "",
-      linewidth        = gaston_config.linewidth,
-      fill             = gaston_config.fill,
-      grid             = gaston_config.grid,
-      keyoptions       = gaston_config.keyoptions,
-      axis             = gaston_config.axis,
-      xrange           = gaston_config.xrange,
-      yrange           = gaston_config.yrange,
-      zrange           = gaston_config.zrange,
-      xzeroaxis        = gaston_config.xzeroaxis,
-      yzeroaxis        = gaston_config.yzeroaxis,
-      zzeroaxis        = gaston_config.zzeroaxis,
-      font             = gaston_config.font,
-      size             = gaston_config.size,
-      background       = gaston_config.background,
-      palette          = gaston_config.palette,
-      termopts         = gaston_config.termopts,
-      print_flag       = false,
-      print_term       = gaston_config.print_term,
-      print_font       = gaston_config.print_font,
-      print_size       = gaston_config.print_size,
-      print_linewidth  = gaston_config.print_linewidth,
-      print_outputfile = gaston_config.print_outputfile
-      ) = AxesConf(title,xlabel,ylabel,zlabel,linewidth,fill,grid,keyoptions,
-                   axis,xrange,yrange,zrange,xzeroaxis,yzeroaxis,zzeroaxis,
-                   font,size,background,palette,termopts,print_flag,print_term,
-                   print_font,print_size,print_linewidth,print_outputfile)
 
 # At the top level, a figure is a handle, an axes configuration, and a
 # set of curves.
 mutable struct Figure
     handle                       # each figure has a unique handle
-    conf::AxesConf               # figure configuration
-    curves::Vector{Curve}        # a vector of curves
-    isempty::Bool                # a flag to indicate if figure is empty
+    term::TermConf               # term options
+    print::PrintConf             # print optinos
+    axes::AxesConf               # figure configuration
+    curves::Union{Nothing,Vector{Curve}} # a vector of curves
     svg::String          # SVG data returned by gnuplot (used in IJulia)
     gpcom::String        # a gnuplot command to run before plotting
 end
 # Construct an empty figure with given handle
-Figure(handle) = Figure(handle,AxesConf(),Curve[],true,"","")
+Figure(handle) = Figure(handle,TermConf(),PrintConf(),AxesConf(),nothing,"","")
 
 # We need a global variable to keep track of gnuplot's state
 mutable struct GnuplotState

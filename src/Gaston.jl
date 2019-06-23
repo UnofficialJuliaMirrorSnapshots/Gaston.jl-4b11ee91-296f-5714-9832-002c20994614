@@ -6,26 +6,13 @@ __precompile__(true)
 module Gaston
 
 export closefigure, closeall, figure,
-       plot, plot!, histogram, imagesc, surf,
+       plot, plot!, scatter, stem, bar, histogram, imagesc, surf,
        printfigure, set
 
-import Base.show
+import Base.show, Base.isempty
 
 using Random
 using DelimitedFiles
-
-# load files
-include("gaston_types.jl")
-include("gaston_aux.jl")
-include("gaston_llplot.jl")
-include("gaston_hilvl.jl")
-include("gaston_config.jl")
-
-# determine if running in an IJulia notebook
-isjupyter = false
-if isdefined(Main, :IJulia) && Main.IJulia.inited
-    isjupyter = true
-end
 
 ## Handle Unix/Windows differences
 #
@@ -45,11 +32,18 @@ if Sys.iswindows()
     err_timeout = 20;
 end
 
+# load files
+include("gaston_types.jl")
+include("gaston_aux.jl")
+include("gaston_llplot.jl")
+include("gaston_hilvl.jl")
+include("gaston_config.jl")
+
+# define function to determine if function is empty
+Base.isempty(f::Figure) = (f.curves == nothing)
+
 # initialize internal state
 gnuplot_state = GnuplotState()
-
-# initialize default configuration
-gaston_config = GastonConfig()
 
 mutable struct Pipes
     gstdin :: Pipe
@@ -62,6 +56,7 @@ const P = Pipes()
 
 # initialize gnuplot
 function __init__()
+    global P
     try
         success(`gnuplot --version`)
     catch
@@ -80,6 +75,16 @@ function __init__()
     P.gstdin = gstdin
     P.gstdout = gstdout
     P.gstderr = gstderr
+
+    global IsJupyterOrJuno = false
+    if isdefined(Main, :IJulia) && Main.IJulia.inited
+        global IsJupyterOrJuno = true
+    elseif isdefined(Main, :Juno) && Main.Juno.isactive()
+        global IsJupyterOrJuno = true
+    end
+
+    global config = default_config()
+
     return nothing
 end
 

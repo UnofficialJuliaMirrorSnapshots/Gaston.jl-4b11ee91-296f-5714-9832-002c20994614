@@ -34,12 +34,11 @@ function async_reader(io::IO, timeout_sec)::Channel
 end
 
 # llplot() is our workhorse plotting function
-function llplot(fig::Figure)
+function llplot(fig::Figure;print=false)
     global gnuplot_state
-    global gaston_config
 
     # if figure has no data, stop here
-    if isempty(fig.isempty)
+    if isempty(fig)
         return
     end
 
@@ -54,13 +53,12 @@ function llplot(fig::Figure)
     gnuplot_send("printerr \"GastonBegin\"")
 
     # Build terminal setup string and send it to gnuplot
-    gnuplot_send(termstring(fig.conf))
+    gnuplot_send(termstring(fig,print))
 
     # Datafile filename. This is where we store the coordinates to plot.
     # This file is then read by gnuplot to do the actual plotting. One file
     # per figure handle is used; this avoids polutting /tmp with too many files.
-    filename = joinpath(tempdir(),
-                        "gaston-$(gaston_config.tmpprefix)-$(fig.handle)")
+    filename = joinpath(tempdir(),"gaston-$(tmpprefix)-$(fig.handle)")
     f = open(filename,"w")
 
     # Send appropriate coordinates and data to gnuplot, depending on
@@ -136,7 +134,7 @@ function llplot(fig::Figure)
 
         # Send gnuplot commands.
         # Build figure configuration to gnuplot
-        gnuplot_send_fig_config(fig.conf)
+        gnuplot_send_fig_config(fig.axes)
         # Send user command to gnuplot
         !isempty(fig.gpcom) && gnuplot_send(fig.gpcom)
         # send plot command to gnuplot
@@ -164,7 +162,7 @@ function llplot(fig::Figure)
         end
         close(f)
         # send figure configuration to gnuplot
-        gnuplot_send_fig_config(fig.conf)
+        gnuplot_send_fig_config(fig.axes)
         # Send user command to gnuplot
         !isempty(fig.gpcom) && gnuplot_send(fig.gpcom)
         # send command to gnuplot
@@ -203,7 +201,7 @@ function llplot(fig::Figure)
 
     # if there was no error and text terminal, read all data from stdout
     if err == ""
-        if (gaston_config.terminal ∈ term_text)
+        if (config[:term][:terminal] ∈ term_text) || (config[:mode] == "ijulia")
             fig.svg = out
         end
     end

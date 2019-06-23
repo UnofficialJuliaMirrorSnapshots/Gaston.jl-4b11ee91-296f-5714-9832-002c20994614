@@ -15,7 +15,7 @@ using Gaston, Test
 @testset "Figure and set commands" begin
     closeall()
     set(reset=true)
-    set(terminal="null")
+    set(mode="null")
     # figures
     @test figure() == 1
     @test figure() == 2
@@ -55,7 +55,7 @@ using Gaston, Test
     @test set(linewidth="3") == nothing
     @test set(pointsize="3") == nothing
     @test set(palette="gray") == nothing
-    @test set(fill="solid") == nothing
+    @test set(fillstyle="solid") == nothing
     @test set(grid="on") == nothing
     if !Sys.iswindows()
         @test set(terminal="x11") == nothing # This test does not pass in Windows
@@ -71,7 +71,7 @@ end
 @testset "2-D plots" begin
     closeall()
     set(reset=true)
-    set(terminal="null")
+    set(mode="null")
     @test closeall() == 0
     @test begin
         plot(1:10)
@@ -99,7 +99,7 @@ end
              linestyle = "-.-",
              pointtype = "ecircle",
              pointsize = "1.1",
-             fill = "",
+             fillstyle = "",
              keyoptions = "inside horizontal left top",
              axis ="loglog",
              xrange = "[2:3]",
@@ -222,13 +222,35 @@ end
     end
     @test begin
         set(reset=true)
-        set(terminal="ijulia")
+        stem(rand(10))
+        Gaston.gnuplot_state.gp_error
+    end == false
+    @test begin
+        stem(rand(10),onlyimpulses=true)
+        Gaston.gnuplot_state.gp_error
+    end == false
+    @test begin
+        scatter(rand(10),rand(10))
+        Gaston.gnuplot_state.gp_error
+    end == false
+    @test begin
+        scatter(randn(10), randn(10), pointtype="λ")
+        Gaston.gnuplot_state.gp_error
+    end == false
+    @test begin
+        t = -2:0.06:2
+        plot(t, sin.(2π*t), plotstyle="fillsteps", fillstyle="solid 0.5", title="Fillsteps plot")
+        Gaston.gnuplot_state.gp_error
+    end == false
+    @test begin
+        set(reset=true)
+        set(mode="ijulia")
         a = repr("text/plain", plot(1:10))
         a[1:35] == "<?xml version=\"1.0\" encoding=\"utf-8"
     end == true
     # build a multiple-plot figure manually
     closeall()
-    set(terminal="null")
+    set(mode="null")
     @test begin
         ac = Gaston.AxesConf(title="T")
         x1, exp_pdf = Gaston.hist(randn(10000),25)
@@ -250,7 +272,7 @@ end
 @testset "Histograms" begin
     closeall()
     set(reset=true)
-    set(terminal="null")
+    set(mode="null")
     @test begin
         histogram(rand(1000))
         Gaston.gnuplot_state.gp_error
@@ -264,7 +286,7 @@ end
                   ylabel = "y",
                   linecolor = "blue",
                   linewidth = "2",
-                  fill = "solid",
+                  fillstyle = "solid",
                   keyoptions = "inside horizontal left top",
                   xrange = "[*:*]",
                   yrange = "[*:*]",
@@ -279,7 +301,7 @@ end
 @testset "Images" begin
     closeall()
     set(reset=true)
-    set(terminal="null")
+    set(mode="null")
     z = rand(5,6)
     @test begin
         imagesc(z,
@@ -311,7 +333,7 @@ end
 @testset "3-D plots" begin
     closeall()
     set(reset=true)
-    set(terminal="null")
+    set(mode="null")
     @test begin
         surf(rand(10,10))
         Gaston.gnuplot_state.gp_error
@@ -357,7 +379,7 @@ end
 @testset "Saving plots" begin
     closeall()
     set(reset=true)
-    set(terminal="null")
+    set(mode="null")
     set(print_outputfile=tempname())
     plot(1:10)
     @test begin
@@ -395,7 +417,7 @@ end
 @testset "Linestyle tests" begin
     closeall()
     set(reset=true)
-    set(terminal="null")
+    set(mode="null")
     @test begin
         plot(1:10) # solid
         Gaston.gnuplot_state.gp_error
@@ -473,7 +495,7 @@ end
 @testset "Tests that should fail" begin
     closeall()
     set(reset=true)
-    set(terminal="null")
+    set(mode="null")
     # figure-related
     @test_throws MethodError figure("invalid")
     @test_throws MethodError figure(1.0)
@@ -519,7 +541,9 @@ end
         printfigure(term="xyz")
         Gaston.gnuplot_state.gp_error
     end
+    @test_throws ErrorException plot!(rand(10),handle=10)
     # set
+    set(mode="normal")
     @test_throws MethodError set(legend=3)
     @test_throws DomainError set(plotstyle="A")
     @test_throws MethodError set(color=3)
