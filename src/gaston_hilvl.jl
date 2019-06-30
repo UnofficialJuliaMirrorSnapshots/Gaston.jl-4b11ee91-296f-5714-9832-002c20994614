@@ -89,7 +89,7 @@ function plot(x::Coord,y::Coord;
              pointtype::String  = config[:curve][:pointtype],
              pointsize::String  = config[:curve][:pointsize],
              fillcolor::String  = config[:curve][:fillcolor],
-             fillstyle::String  = config[:axes][:fillstyle],
+             fillstyle::String  = config[:curve][:fillstyle],
              grid::String       = config[:axes][:grid],
              boxwidth::String   = config[:axes][:boxwidth],
              keyoptions::String = config[:axes][:keyoptions],
@@ -162,7 +162,7 @@ function plot!(x::Coord,y::Coord;
              pointtype::String = config[:curve][:pointtype],
              pointsize::String = config[:curve][:pointsize],
              fillcolor::String  = config[:curve][:fillcolor],
-             fillstyle::String  = config[:axes][:fillstyle],
+             fillstyle::String  = config[:curve][:fillstyle],
              financial::FinancialCoords = FinancialCoords(),
              err::ErrorCoords  = ErrorCoords(),
              handle::Union{Int,Nothing} = gnuplot_state.current
@@ -346,6 +346,50 @@ function surf(x::Coord,y::Coord,Z::Coord;
 end
 surf(x::Coord,y::Coord,f::Function;args...) = surf(x,y,meshgrid(x,y,f);args...)
 surf(Z::Matrix;args...) = surf(1:size(Z)[2],1:size(Z)[1],Z;args...)
+
+function surf!(x::Coord,y::Coord,Z::Coord;
+      legend::String     = "",
+      plotstyle::String  = config[:curve][:plotstyle],
+      linecolor::String  = config[:curve][:linecolor],
+      linewidth::String  = "1",
+      pointtype::String  = config[:curve][:pointtype],
+      pointsize::String  = config[:curve][:pointsize],
+      handle::Union{Int,Nothing} = gnuplot_state.current
+     )
+    valid_3Dplotstyle(plotstyle)
+    valid_pointtype(pointtype)
+    ndims(Z) == 2 || throw(DimensionMismatch("Z must have two dimensions."))
+    length(x) == Base.size(Z)[1] || throw(DimensionMismatch("invalid coordinates."))
+    length(y) == Base.size(Z)[2]  || throw(DimensionMismatch("Invalid coordinates."))
+    handles =gethandles()
+    handle ∈ handles || error("Cannot append curve to non-existing handle")
+    handle = figure(handle, redraw = false)
+    cc = CurveConf(plotstyle = plotstyle,
+                   legend = legend,
+                   linecolor = linecolor,
+                   pointtype = pointtype,
+                   linewidth = linewidth,
+                   pointsize = pointsize)
+    c = Curve(x,y,Z,cc)
+    push_figure!(handle,c)
+    return gnuplot_state.figs[findfigure(handle)]
+end
+surf!(x::Coord,y::Coord,f::Function;args...) = surf!(x,y,meshgrid(x,y,f);args...)
+surf!(Z::Matrix;args...) = surf!(1:size(Z)[2],1:size(Z)[1],Z;args...)
+
+function contour(x::Coord,y::Coord,Z::Coord;labels=true,args...)
+    gp = """unset key
+            set view map
+            set contour base
+            unset surface
+            set cntrlabel font ",7"
+            set cntrparam levels 10"""
+    p = surf(x,y,Z;gpcom=gp,args...)
+    labels && (p = surf!(x,y,Z;plotstyle="labels"))
+    return p
+end
+contour(x::Coord,y::Coord,f::Function;args...) = contour(x,y,meshgrid(x,y,f);args...)
+contour(Z::Matrix;args...) = contour(1:size(Z)[2],1:size(Z)[1],Z;args...)
 
 # print a figure to a file
 function printfigure(;handle::Union{Int,Nothing} = gnuplot_state.current,

@@ -69,7 +69,8 @@ default_config() = Dict(:mode => IsJupyterOrJuno ? "ijulia" : "normal",
                                        :linestyle => "",
                                        :pointtype => "",
                                        :pointsize => "",
-                                       :fillcolor => ""),
+                                       :fillcolor => "",
+                                       :fillstyle => ""),
                         :print => Dict(:print_term => "pdfcairo",
                                        :print_font => "",
                                        :print_size => "",
@@ -144,7 +145,7 @@ const supported_2Dplotstyles = ["", "lines", "linespoints", "points",
                                 "impulses", "boxes", "errorlines", "errorbars",
                                 "dots", "steps", "fsteps", "fillsteps",
                                 "financebars"]
-const supported_3Dplotstyles = ["", "lines", "linespoints", "points",
+const supported_3Dplotstyles = ["", "lines", "linespoints", "points", "labels",
                                 "impulses", "pm3d", "image", "rgbimage", "dots"]
 const supported_plotstyles = vcat(supported_2Dplotstyles, supported_3Dplotstyles)
 const supported_axis = ["", "normal", "semilogx", "semilogy", "semilogz",
